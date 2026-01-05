@@ -99,22 +99,26 @@ export const BUILDINGS = {
   45: { name: 'Escritório Azul', cost: 800, jobs: 40, income: 100, type: BUILDING_TYPES.COMMERCIAL },
   57: { name: 'Torre Comercial', cost: 1500, jobs: 80, income: 200, type: BUILDING_TYPES.COMMERCIAL },
 
-  // --- INDUSTRIAL (Reutilizando alguns que parecem genéricos ou improvisando) ---
-  // Como não há indústrias óbvias, vamos usar alguns comerciais "feios" ou repetir
-  // Vamos usar o frame 52 (tampa de bueiro/água?) como "bueiro industrial" ou algo assim por enquanto, 
-  // ou definir que não temos sprites específicos e usar placeholders se precisar.
-  // Mas para ficar bonito, vamos reusar o prédio 56 como "Sede da Indústria" e talvez o 44 (muro) como fábrica baixa.
-  // Melhor: Vamos classificar o "Prédio Branco/Azul" (56) como Indústria Limpa/Tecnologia.
+
   56: { name: 'Tech Office', cost: 1000, jobs: 50, income: 150, pollution: 2, type: BUILDING_TYPES.INDUSTRIAL },
 
   // --- SERVIÇOS ---
   // Vamos usar o prédio vermelho (64) e alto (65) como serviços públicos
   64: { name: 'Bombeiros', cost: 500, safety: 20, type: BUILDING_TYPES.SERVICE },
-  65: { name: 'Hospital', cost: 1200, health: 30, type: BUILDING_TYPES.SERVICE }
+  65: { name: 'Hospital', cost: 1200, health: 30, type: BUILDING_TYPES.SERVICE },
+  
+  // Custom Sprites
+  200: { 
+    name: 'Bombeiro Pequeno', 
+    cost: 300, 
+    safety: 15, 
+    type: BUILDING_TYPES.SERVICE, 
+    texture: 'bombeiro_pequeno' // Propriedade nova para identificar textura custom
+  }
 }
 
 export function getBuilding(index) {
-  return BUILDINGS[index] || { name: `Item ${index}`, cost: 0, type: 'terrain' }
+  return BUILDINGS[index] || { name: 'Desconhecido', cost: 0, type: BUILDING_TYPES.TERRAIN }
 }
 
 export function getBuildingByTile(row, col, textureCols = 12) {
@@ -122,13 +126,66 @@ export function getBuildingByTile(row, col, textureCols = 12) {
 }
 
 export function getBuildingsByCategory(category) {
-  const result = []
-  for (const [index, building] of Object.entries(BUILDINGS)) {
-    if (building.type === category) {
-      result.push({ index: parseInt(index), ...building })
-    }
-  }
-  return result
+  return Object.entries(BUILDINGS)
+    .filter(([_, b]) => b.type === category)
+    .map(([index, b]) => ({ index: parseInt(index), ...b }))
+}
+
+// Mapeamento de Auto-Tiling
+// Bitmask: 
+// 1 = NW (Cima-Esquerda) [y-1]
+// 2 = SW (Baixo-Esquerda) [x+1]
+// 4 = SE (Baixo-Direita) [y+1]
+// 8 = NE (Cima-Direita) [x-1]
+export const ROAD_AUTO_TILES = {
+  0: 2,   // Isolado (Default)
+  
+  // --- RETAS ---
+  // Reta (NW + SE) - Conecta Cima-Esq e Baixo-Dir
+  5: 2,   // (1+4)
+  1: 2,   // Só NW (Ponta)
+  4: 2,   // Só SE (Ponta)
+  
+  // Reta (SW + NE) - Conecta Baixo-Esq e Cima-Dir
+  10: 3,  // (2+8)
+  2: 3,   // Só SW (Ponta)
+  8: 3,   // Só NE (Ponta)
+  
+  // --- CURVAS ---
+  // Frame 16: Topo (NW + NE) -> 1 + 8 = 9
+  9: 40,
+  
+  // Frame 17: Direita (NE + SE) -> 8 + 4 = 12
+  12: 38, 
+  
+  // Frame 18: Baixo (SE + SW) -> 4 + 2 = 6
+  6: 41,
+  
+  // Frame 19: Esquerda (SW + NW) -> 2 + 1 = 3
+  3: 39,
+  
+  // --- INTERSEÇÕES T (Triplas) ---
+  // T (Menos NE) -> NW + SW + SE = 1 + 2 + 4 = 7
+  7: 9, 
+  
+  // T (Menos SE) -> NW + SW + NE = 1 + 2 + 8 = 11
+  11: 9,
+  
+  // T (Menos SW) -> NW + SE + NE = 1 + 4 + 8 = 13
+  13: 9,
+  
+  // T (Menos NW) -> SW + SE + NE = 2 + 4 + 8 = 14
+  14: 9,
+  
+  // --- CRUZAMENTO ---
+  15: 9   // Todos conectados
+}
+
+BUILDINGS[100] = { 
+  name: 'Estrada Inteligente', 
+  cost: 20, 
+  type: BUILDING_TYPES.ROAD,
+  autoTile: true 
 }
 
 export function getAllCategories() {

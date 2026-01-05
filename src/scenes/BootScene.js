@@ -43,6 +43,9 @@ export class BootScene extends Phaser.Scene {
       frameWidth: GAME_CONFIG.SPRITE_WIDTH,
       frameHeight: GAME_CONFIG.SPRITE_HEIGHT
     })
+    
+    // Carregar sprites individuais
+    this.load.image('bombeiro_pequeno', '/bombeiro_pequeno.png')
   }
   
   create() {

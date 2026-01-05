@@ -25,7 +25,9 @@ export class GameScene extends Phaser.Scene {
     this.isDragging = false
     this.dragStart = { x: 0, y: 0 }
     this.mapOffset = { x: 0, y: 0 }
+    this.mapOffset = { x: 0, y: 0 }
     this.keys = null
+    this.currentRotation = 0 // 0: Normal, 1: FlipX
   }
   
   create() {
@@ -44,7 +46,10 @@ export class GameScene extends Phaser.Scene {
       arrowDown: Phaser.Input.Keyboard.KeyCodes.DOWN,
       arrowLeft: Phaser.Input.Keyboard.KeyCodes.LEFT,
       arrowRight: Phaser.Input.Keyboard.KeyCodes.RIGHT,
-      reset: Phaser.Input.Keyboard.KeyCodes.R,
+      arrowLeft: Phaser.Input.Keyboard.KeyCodes.LEFT,
+      arrowRight: Phaser.Input.Keyboard.KeyCodes.RIGHT,
+      reset: Phaser.Input.Keyboard.KeyCodes.BACKSPACE,
+      rotate: Phaser.Input.Keyboard.KeyCodes.R,
       space: Phaser.Input.Keyboard.KeyCodes.SPACE
     })
     
@@ -63,6 +68,11 @@ export class GameScene extends Phaser.Scene {
   
   update() {
     this.handleKeyboardCamera()
+    
+    if (Phaser.Input.Keyboard.JustDown(this.keys.rotate)) {
+      this.currentRotation = this.currentRotation === 0 ? 1 : 0
+      this.showNotification(`Rotação: ${this.currentRotation === 0 ? 'Normal' : 'Invertida'}`, 'info')
+    }
   }
   
   createMap() {
@@ -76,19 +86,32 @@ export class GameScene extends Phaser.Scene {
     this.mapContainer.add(this.highlightGraphics)
     
     this.tileSprites = []
+    this.groundSprites = [] // Nova camada de chão
     this.connectionIndicators = []
     
     for (let i = 0; i < MAP_SIZE; i++) {
       this.tileSprites[i] = []
+      this.groundSprites[i] = []
       this.connectionIndicators[i] = []
       for (let j = 0; j < MAP_SIZE; j++) {
         const { x, y } = this.isoToScreen(i, j)
         
+        // Sprite de Chão (Base)
+        const ground = this.add.sprite(x, y - SPRITE_HEIGHT / 2 + TILE_HEIGHT + 35, 'tiles', 0)
+        ground.setOrigin(0.5, 0.5)
+        ground.setData('gridX', i)
+        ground.setData('gridY', j)
+        ground.setData('layer', 0) // Layer 0 = Chão
+        this.mapContainer.add(ground)
+        this.groundSprites[i][j] = ground
+        
+        // Sprite do Prédio/Estrutura
         const sprite = this.add.sprite(x, y - SPRITE_HEIGHT / 2 + TILE_HEIGHT + 35, 'tiles', 0)
         sprite.setOrigin(0.5, 0.5)
         sprite.setInteractive()
         sprite.setData('gridX', i)
         sprite.setData('gridY', j)
+        sprite.setData('layer', 1) // Layer 1 = Estrutura
         
         this.mapContainer.add(sprite)
         this.tileSprites[i][j] = sprite
@@ -104,6 +127,37 @@ export class GameScene extends Phaser.Scene {
     }
     
     this.sortMapSprites()
+    
+    // Adicionar Indicadores de Direção (Debug Visual)
+    const centerTile = this.isoToScreen(0, 0)
+    const leftTile = this.isoToScreen(MAP_SIZE - 1, 0)
+    const rightTile = this.isoToScreen(0, MAP_SIZE - 1)
+    const bottomTile = this.isoToScreen(MAP_SIZE - 1, MAP_SIZE - 1)
+    
+    const style = { font: 'bold 16px Arial', color: '#fbbf24', backgroundColor: '#00000088', padding: { x: 4, y: 4 } }
+    
+    // Topo (Entre NE e NW)
+    this.mapContainer.add(this.add.text(centerTile.x, centerTile.y - 120, 'NORTE (Top)', style).setOrigin(0.5))
+    
+    // Esquerda (Entre NW e SW) - Onde X aumenta (SW) e Y diminui? Não.
+    // Lado Esquerdo do losango é definido por X variando (0 a 10) e Y=0
+    // Isso é a direção SW (x aumenta)
+    this.mapContainer.add(this.add.text(leftTile.x - 60, leftTile.y, 'OESTE\n(SW - x+)', style).setOrigin(1, 0.5))
+    
+    // Direita (Entre NE e SE) - Lado onde Y varia (0 a 10) e X=0
+    // Isso é a direção SE (y aumenta)
+    this.mapContainer.add(this.add.text(rightTile.x + 60, rightTile.y, 'LESTE\n(SE - y+)', style).setOrigin(0, 0.5))
+    
+    // Baixo
+    this.mapContainer.add(this.add.text(bottomTile.x, bottomTile.y + 100, 'SUL (Bottom)', style).setOrigin(0.5))
+    
+    // Indicadores dos Eixos (NW/NE)
+    // NW: Direção onde Y diminui. Fica "atrás" da esquerda.
+    this.mapContainer.add(this.add.text(centerTile.x - 100, centerTile.y - 50, 'NW (y-)', { ...style, color: '#94a3b8' }).setOrigin(0.5))
+    
+    // NE: Direção onde X diminui. Fica "atrás" da direita.
+    this.mapContainer.add(this.add.text(centerTile.x + 100, centerTile.y - 50, 'NE (x-)', { ...style, color: '#94a3b8' }).setOrigin(0.5))
+
   }
   
   isoToScreen(gridX, gridY) {
@@ -127,7 +181,14 @@ export class GameScene extends Phaser.Scene {
       const diff = (aX + aY) - (bX + bY)
       if (diff !== 0) return diff
       
-      // Se estiverem na mesma posição, indicator fica em cima do sprite
+      // Mesma posição: Ordenar por layer
+      // Layer 0 (Chão) < Layer 1 (Estrutura) < Indicator
+      const aLayer = a.getData ? (a.getData('layer') || 0) : 0
+      const bLayer = b.getData ? (b.getData('layer') || 0) : 0
+      
+      if (aLayer !== bLayer) return aLayer - bLayer
+      
+      // Se estiverem na mesma posição e layer (ex: indicator vs estrutura se não definido layer no indicator)
       if (a.getData && a.getData('isIndicator')) return 1
       if (b.getData && b.getData('isIndicator')) return -1
       
@@ -333,8 +394,19 @@ export class GameScene extends Phaser.Scene {
       const row = Math.floor(building.index / TEXTURE_COLS)
       const col = building.index % TEXTURE_COLS
       
-      const sprite = this.add.sprite(x, y, 'tiles', building.index)
-      sprite.setScale(scale)
+      let sprite
+      if (building.texture) {
+        sprite = this.add.sprite(x, y, building.texture)
+        // Ajuste de escala específico se necessário, ou usar padrão
+        const scaleAdjust = 130 / sprite.width // Tentar manter largura consistente
+        sprite.setScale(scale * scaleAdjust)
+      } else {
+        // Se for Estrada Inteligente (100), mostrar frame 7 (Cruzamento) como ícone
+        const frameIndex = building.index === 100 ? 7 : building.index
+        sprite = this.add.sprite(x, y, 'tiles', frameIndex)
+        sprite.setScale(scale)
+      }
+      
       sprite.setOrigin(0.5, 0.5)
       sprite.setInteractive({ useHandCursor: true })
       sprite.setData('buildingIndex', building.index)
@@ -586,7 +658,7 @@ export class GameScene extends Phaser.Scene {
       if (isRightClick) {
         this.cityManager.clearTile(pos.x, pos.y)
       } else {
-        const result = this.cityManager.setTile(pos.x, pos.y, this.selectedTile.row, this.selectedTile.col)
+        const result = this.cityManager.setTile(pos.x, pos.y, this.selectedTile.row, this.selectedTile.col, this.currentRotation)
         if (!result.success && result.reason === 'no_money') {
           this.showNotification('Dinheiro insuficiente!', 'error')
         }
@@ -599,13 +671,67 @@ export class GameScene extends Phaser.Scene {
   }
   
   updateMapDisplay() {
-    const { MAP_SIZE, TEXTURE_COLS } = GAME_CONFIG
+    const { MAP_SIZE, TEXTURE_COLS, TILE_HEIGHT, SPRITE_HEIGHT } = GAME_CONFIG
     
     for (let i = 0; i < MAP_SIZE; i++) {
       for (let j = 0; j < MAP_SIZE; j++) {
         const tile = this.cityManager.getTile(i, j)
         const frameIndex = tile.row * TEXTURE_COLS + tile.col
-        this.tileSprites[i][j].setFrame(frameIndex)
+        const building = getBuilding(frameIndex)
+        
+        const sprite = this.tileSprites[i][j]
+        const ground = this.groundSprites[i][j]
+        const { x, y } = this.isoToScreen(i, j)
+        
+        // Aplicar rotação
+        const rotation = tile.rotation || 0
+        sprite.setFlipX(rotation === 1)
+        
+        if (building.texture) {
+          // --- MODO CUSTOM TEXTURE (ex: Bombeiro) ---
+          
+          // 1. Mostrar Chão (Grama/Base)
+          ground.setVisible(true)
+          ground.setFrame(0) // 0 = Grama padrão
+          
+          // 2. Configurar Sprite do Prédio
+          sprite.setTexture(building.texture)
+          
+          // Redimensionar para caber na largura do tile (com margem)
+          // TILE_WIDTH é 128. Vamos usar 120px como alvo seguro de largura base
+          const targetWidth = GAME_CONFIG.TILE_WIDTH
+          const scale = targetWidth / sprite.width
+          sprite.setScale(scale)
+          
+          // Posicionamento: Base da imagem no vértice inferior do losango
+          sprite.setOrigin(0.5, 1) // Base inferior
+          // Vértice inferior do losango é em Y + TILE_HEIGHT
+          sprite.y = y + TILE_HEIGHT
+          sprite.x = x // Centro X
+          
+        } else {
+          // --- MODO SPRITESHEET PADRÃO ---
+          
+          // 1. Esconder Chão separado (o sprite padrão já tem chão)
+          // Exceção: Se o frame atual for transparente/invisível (o que não deve ocorrer)
+          ground.setVisible(false)
+          
+          // 2. Configurar Sprite
+          if (sprite.texture.key !== 'tiles') {
+            sprite.setTexture('tiles')
+          }
+          sprite.setFrame(frameIndex)
+          
+          // Resetar propriedades para o padrão do spritesheet
+          sprite.setScale(1)
+          sprite.setOrigin(0.5, 0.5)
+          
+          // Restaurar posição padrão do spritesheet (calculada para frames de 230px de altura)
+          sprite.y = y - SPRITE_HEIGHT / 2 + TILE_HEIGHT + 35
+          sprite.x = x
+          
+          sprite.setFlipX(false) // Tiles padrão geralmente não giram dessa forma
+        }
       }
     }
   }

@@ -40,20 +40,63 @@ export class CityManager {
     }
     return null
   }
+
+  // Helper to get building info from map coordinates (row, col)
+  getBuildingInfo(buildingRow, buildingCol) {
+    const index = buildingRow * GAME_CONFIG.TEXTURE_COLS + buildingCol;
+    return getBuilding(index);
+  }
+
+  // Helper to get cost from map coordinates (row, col)
+  getCost(buildingRow, buildingCol) {
+    const building = this.getBuildingInfo(buildingRow, buildingCol);
+    return building.cost;
+  }
   
-  setTile(x, y, row, col) {
+  setTile(x, y, buildingRow, buildingCol, rotation = 0) {
     if (x >= 0 && x < GAME_CONFIG.MAP_SIZE && y >= 0 && y < GAME_CONFIG.MAP_SIZE) {
-      const index = row * GAME_CONFIG.TEXTURE_COLS + col
-      const building = getBuilding(index)
-      
-      if (this.money < building.cost) {
+      if (this.money < this.getCost(buildingRow, buildingCol)) {
         return { success: false, reason: 'no_money' }
       }
       
-      this.money -= building.cost
-      this.map[x][y] = { row, col }
+      const newBuilding = this.getBuildingInfo(buildingRow, buildingCol) // Pegar info original do que estamos construindo
+      
+      // LÓGICA DE AUTO-TILE DE ESTRADA
+      let realRow = buildingRow
+      let realCol = buildingCol
+      
+      if (newBuilding.autoTile) {
+        // Se for Estrada Inteligente, calcula o frame correto
+        // Mas atenção: Precisamos 'fingir' que já colocamos a estrada para o cálculo funcionar?
+        // O check olha vizinhos. O próprio x,y ainda é o antigo.
+        // O ideal é colocar a estrada no mapa (frame default) e depois atualizar.
+        // Ou o getAutoTileFrame olha vizinhos e decide o frame DESTE tile baseada neles.
+        // Vizinhos não mudam ainda.
+        
+        const frameIndex = this.roadSystem.getAutoTileFrame(x, y)
+        realRow = Math.floor(frameIndex / GAME_CONFIG.TEXTURE_COLS)
+        realCol = frameIndex % GAME_CONFIG.TEXTURE_COLS
+      }
+      
+      const tile = this.map[x][y]
+      const previousBuilding = this.getBuildingInfo(tile.row, tile.col)
+      
+      if (previousBuilding.cost > 0) {
+        this.money += Math.floor(previousBuilding.cost * 0.5)
+      }
+      
+      this.money -= newBuilding.cost
+      
+      this.map[x][y] = { row: realRow, col: realCol, rotation: rotation }
+      
       this.roadSystem.updateConnections()
-      this.calculateStats()
+      
+      // AUTO-UPDATE VIZINHOS
+      if (newBuilding.type === BUILDING_TYPES.ROAD) {
+         this.roadSystem.updateRoadVisuals(x, y)
+      }
+      
+      this.calculateStats() 
       this.notifyListeners()
       
       return { success: true }
@@ -63,8 +106,19 @@ export class CityManager {
   
   clearTile(x, y) {
     if (x >= 0 && x < GAME_CONFIG.MAP_SIZE && y >= 0 && y < GAME_CONFIG.MAP_SIZE) {
+      // Verificar se era estrada antes de apagar
+      const tile = this.map[x][y]
+      const index = tile.row * GAME_CONFIG.TEXTURE_COLS + tile.col
+      const wasRoad = getBuilding(index).type === BUILDING_TYPES.ROAD
+      
       this.map[x][y] = { row: 0, col: 0 }
+      
       this.roadSystem.updateConnections()
+      
+      if (wasRoad) {
+        this.roadSystem.updateRoadVisuals(x, y)
+      }
+      
       this.calculateStats()
       this.notifyListeners()
       return true
@@ -74,6 +128,11 @@ export class CityManager {
   
   isTileConnected(x, y) {
     return this.roadSystem.isConnected(x, y)
+  }
+  
+  canAfford(buildingIndex) {
+    const building = getBuilding(buildingIndex)
+    return this.money >= building.cost
   }
   
   calculateStats() {
