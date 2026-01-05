@@ -24,59 +24,97 @@ export const CATEGORY_INFO = {
   [BUILDING_TYPES.UTILITY]: { name: 'Utilidades', color: 0xeab308 }
 }
 
+// Vamos mapear TUDO para tentar achar
 export const BUILDINGS = {
-  0: { name: 'Grama', cost: 0, income: 0, population: 0, type: BUILDING_TYPES.TERRAIN },
-  1: { name: 'Água', cost: 50, income: 0, population: 0, type: BUILDING_TYPES.TERRAIN },
-  2: { name: 'Areia', cost: 10, income: 0, population: 0, type: BUILDING_TYPES.TERRAIN },
-  3: { name: 'Terra', cost: 5, income: 0, population: 0, type: BUILDING_TYPES.TERRAIN },
+  // --- TERRENO & ESTRADAS ---
+  0: { name: 'Grama', cost: 0, type: BUILDING_TYPES.TERRAIN },
+  1: { name: 'Fonte', cost: 150, happiness: 10, type: BUILDING_TYPES.DECORATION },
   
-  4: { name: 'Estrada Reta', cost: 20, income: 0, population: 0, type: BUILDING_TYPES.ROAD },
-  5: { name: 'Estrada Curva', cost: 20, income: 0, population: 0, type: BUILDING_TYPES.ROAD },
-  6: { name: 'Cruzamento', cost: 25, income: 0, population: 0, type: BUILDING_TYPES.ROAD },
-  7: { name: 'Estrada T', cost: 22, income: 0, population: 0, type: BUILDING_TYPES.ROAD },
-  8: { name: 'Estrada Fim', cost: 20, income: 0, population: 0, type: BUILDING_TYPES.ROAD },
-  9: { name: 'Ponte', cost: 50, income: 0, population: 0, type: BUILDING_TYPES.ROAD },
-  10: { name: 'Trilhos', cost: 30, income: 0, population: 0, type: BUILDING_TYPES.ROAD },
-  11: { name: 'Calçada', cost: 15, income: 0, population: 0, type: BUILDING_TYPES.ROAD },
+  // Estradas básicas
+  2: { name: 'Estrada Reta 1', cost: 20, type: BUILDING_TYPES.ROAD },
+  3: { name: 'Curva Suave', cost: 20, type: BUILDING_TYPES.ROAD },
+  4: { name: 'Estrada Reta 2', cost: 20, type: BUILDING_TYPES.ROAD },
+  5: { name: 'Estrada Arborizada 1', cost: 30, happiness: 1, type: BUILDING_TYPES.ROAD },
+  6: { name: 'Estrada Arborizada 2', cost: 30, happiness: 1, type: BUILDING_TYPES.ROAD },
+  7: { name: 'Cruzamento', cost: 25, type: BUILDING_TYPES.ROAD },
+  8: { name: 'Cruzamento T', cost: 25, type: BUILDING_TYPES.ROAD },
+  9: { name: 'Estrada Fim', cost: 20, type: BUILDING_TYPES.ROAD },
   
-  12: { name: 'Casa Pequena', cost: 100, income: 10, population: 5, happiness: 2, type: BUILDING_TYPES.RESIDENTIAL },
-  13: { name: 'Casa Média', cost: 200, income: 20, population: 10, happiness: 3, type: BUILDING_TYPES.RESIDENTIAL },
-  14: { name: 'Casa Grande', cost: 350, income: 35, population: 20, happiness: 4, type: BUILDING_TYPES.RESIDENTIAL },
-  15: { name: 'Prédio', cost: 500, income: 50, population: 50, happiness: 2, type: BUILDING_TYPES.RESIDENTIAL },
+  // Mais variações de estrada (Linha 2 e 3)
+  12: { name: 'Estrada Poste 1', cost: 25, type: BUILDING_TYPES.ROAD },
+  13: { name: 'Estrada Poste 2', cost: 25, type: BUILDING_TYPES.ROAD },
+  14: { name: 'Estrada Reta 3', cost: 20, type: BUILDING_TYPES.ROAD },
+  15: { name: 'Estrada Reta 4', cost: 20, type: BUILDING_TYPES.ROAD },
+  16: { name: 'Curva 1', cost: 20, type: BUILDING_TYPES.ROAD },
+  17: { name: 'Curva 2', cost: 20, type: BUILDING_TYPES.ROAD },
+  18: { name: 'Curva 3', cost: 20, type: BUILDING_TYPES.ROAD },
+  19: { name: 'Curva 4', cost: 20, type: BUILDING_TYPES.ROAD },
+  20: { name: 'Interseção 1', cost: 25, type: BUILDING_TYPES.ROAD },
+  21: { name: 'Interseção 2', cost: 25, type: BUILDING_TYPES.ROAD },
   
-  16: { name: 'Loja', cost: 150, income: 25, population: 0, jobs: 5, type: BUILDING_TYPES.COMMERCIAL },
-  17: { name: 'Mercado', cost: 300, income: 45, population: 0, jobs: 10, type: BUILDING_TYPES.COMMERCIAL },
-  18: { name: 'Shopping', cost: 800, income: 100, population: 0, jobs: 30, happiness: 5, type: BUILDING_TYPES.COMMERCIAL },
-  19: { name: 'Escritório', cost: 400, income: 60, population: 0, jobs: 20, type: BUILDING_TYPES.COMMERCIAL },
+  // Linha 3
+  24: { name: 'Estrada Diagonal 1', cost: 20, type: BUILDING_TYPES.ROAD },
+  25: { name: 'Estrada Diagonal 2', cost: 20, type: BUILDING_TYPES.ROAD },
+  26: { name: 'Curva Fechada 1', cost: 20, type: BUILDING_TYPES.ROAD },
+  27: { name: 'Curva Fechada 2', cost: 20, type: BUILDING_TYPES.ROAD },
+  28: { name: 'Curva Fechada 3', cost: 20, type: BUILDING_TYPES.ROAD },
+  29: { name: 'Curva Fechada 4', cost: 20, type: BUILDING_TYPES.ROAD },
+  30: { name: 'Calçada Esquina', cost: 15, type: BUILDING_TYPES.ROAD },
+  31: { name: 'Calçada Reta', cost: 15, type: BUILDING_TYPES.ROAD },
+  32: { name: 'Estrada Curta', cost: 20, type: BUILDING_TYPES.ROAD },
+  33: { name: 'Estrada Curta 2', cost: 20, type: BUILDING_TYPES.ROAD },
+  34: { name: 'Fim de Rua', cost: 20, type: BUILDING_TYPES.ROAD },
+  35: { name: 'Fim de Rua 2', cost: 20, type: BUILDING_TYPES.ROAD },
   
-  20: { name: 'Fábrica Pequena', cost: 250, income: 40, population: 0, jobs: 15, pollution: 3, type: BUILDING_TYPES.INDUSTRIAL },
-  21: { name: 'Fábrica Grande', cost: 500, income: 80, population: 0, jobs: 30, pollution: 6, type: BUILDING_TYPES.INDUSTRIAL },
-  22: { name: 'Armazém', cost: 200, income: 20, population: 0, jobs: 5, pollution: 1, type: BUILDING_TYPES.INDUSTRIAL },
-  23: { name: 'Usina', cost: 1000, income: 0, population: 0, energy: 100, pollution: 10, type: BUILDING_TYPES.UTILITY },
+  // Linha 4 (Início)
+  36: { name: 'Curva Larga 1', cost: 25, type: BUILDING_TYPES.ROAD },
+  37: { name: 'Curva Larga 2', cost: 25, type: BUILDING_TYPES.ROAD },
+  38: { name: 'Curva Larga 3', cost: 25, type: BUILDING_TYPES.ROAD },
+  39: { name: 'Curva Larga 4', cost: 25, type: BUILDING_TYPES.ROAD },
+  40: { name: 'Interseção Y', cost: 25, type: BUILDING_TYPES.ROAD },
+  41: { name: 'Interseção Y 2', cost: 25, type: BUILDING_TYPES.ROAD },
   
-  24: { name: 'Delegacia', cost: 400, income: -15, population: 0, safety: 20, type: BUILDING_TYPES.SERVICE },
-  25: { name: 'Hospital', cost: 600, income: -25, population: 0, health: 25, happiness: 5, type: BUILDING_TYPES.SERVICE },
-  26: { name: 'Escola', cost: 350, income: -10, population: 0, education: 15, happiness: 3, type: BUILDING_TYPES.SERVICE },
-  27: { name: 'Bombeiros', cost: 400, income: -15, population: 0, safety: 15, type: BUILDING_TYPES.SERVICE },
-  
-  28: { name: 'Parque Pequeno', cost: 80, income: 0, population: 0, happiness: 8, pollution: -2, type: BUILDING_TYPES.DECORATION },
-  29: { name: 'Parque Grande', cost: 150, income: 0, population: 0, happiness: 15, pollution: -4, type: BUILDING_TYPES.DECORATION },
-  30: { name: 'Praça', cost: 100, income: 0, population: 0, happiness: 10, type: BUILDING_TYPES.DECORATION },
-  31: { name: 'Fonte', cost: 120, income: 0, population: 0, happiness: 12, type: BUILDING_TYPES.DECORATION },
-  
-  32: { name: 'Árvore', cost: 15, income: 0, population: 0, happiness: 2, pollution: -1, type: BUILDING_TYPES.NATURE },
-  33: { name: 'Floresta', cost: 30, income: 0, population: 0, happiness: 4, pollution: -2, type: BUILDING_TYPES.NATURE },
-  
-  34: { name: 'Igreja', cost: 250, income: 0, population: 0, happiness: 10, type: BUILDING_TYPES.LANDMARK },
-  35: { name: 'Monumento', cost: 500, income: 5, population: 0, happiness: 15, type: BUILDING_TYPES.LANDMARK }
-}
+  // Água (Decorativo)
+  48: { name: 'Canal Reto', cost: 50, happiness: 5, type: BUILDING_TYPES.DECORATION },
+  49: { name: 'Canal Canto', cost: 50, happiness: 5, type: BUILDING_TYPES.DECORATION },
 
-for (let i = 36; i < 72; i++) {
-  BUILDINGS[i] = { name: 'Decoração', cost: 25, income: 0, population: 0, happiness: 1, type: BUILDING_TYPES.DECORATION }
+  // --- RESIDENCIAL ---
+  67: { name: 'Casa Pequena (Vermelha)', cost: 100, population: 4, type: BUILDING_TYPES.RESIDENTIAL },
+  69: { name: 'Casa Pequena (Branca)', cost: 100, population: 4, type: BUILDING_TYPES.RESIDENTIAL },
+  55: { name: 'Sobrado Branco', cost: 200, population: 8, type: BUILDING_TYPES.RESIDENTIAL },
+  53: { name: 'Sobrado Creme', cost: 200, population: 8, type: BUILDING_TYPES.RESIDENTIAL },
+  62: { name: 'Apartamento Amarelo', cost: 400, population: 20, type: BUILDING_TYPES.RESIDENTIAL },
+  60: { name: 'Apartamento Tijolo', cost: 400, population: 20, type: BUILDING_TYPES.RESIDENTIAL },
+  54: { name: 'Residencial Moderno', cost: 600, population: 40, happiness: 5, type: BUILDING_TYPES.RESIDENTIAL },
+  58: { name: 'Condomínio Marrom', cost: 500, population: 35, type: BUILDING_TYPES.RESIDENTIAL },
+  63: { name: 'Torre Amarela', cost: 1000, population: 80, type: BUILDING_TYPES.RESIDENTIAL },
+  61: { name: 'Torre Tijolo', cost: 1000, population: 80, type: BUILDING_TYPES.RESIDENTIAL },
+
+  // --- COMERCIAL ---
+  46: { name: 'Loja de Esquina', cost: 200, jobs: 5, income: 20, type: BUILDING_TYPES.COMMERCIAL },
+  66: { name: 'Mercadinho Verde', cost: 250, jobs: 6, income: 25, type: BUILDING_TYPES.COMMERCIAL },
+  68: { name: 'Loja Azul', cost: 300, jobs: 8, income: 35, type: BUILDING_TYPES.COMMERCIAL },
+  70: { name: 'Loja Vermelha', cost: 300, jobs: 8, income: 35, type: BUILDING_TYPES.COMMERCIAL },
+  71: { name: 'Farmácia', cost: 350, jobs: 10, income: 40, type: BUILDING_TYPES.COMMERCIAL },
+  45: { name: 'Escritório Azul', cost: 800, jobs: 40, income: 100, type: BUILDING_TYPES.COMMERCIAL },
+  57: { name: 'Torre Comercial', cost: 1500, jobs: 80, income: 200, type: BUILDING_TYPES.COMMERCIAL },
+
+  // --- INDUSTRIAL (Reutilizando alguns que parecem genéricos ou improvisando) ---
+  // Como não há indústrias óbvias, vamos usar alguns comerciais "feios" ou repetir
+  // Vamos usar o frame 52 (tampa de bueiro/água?) como "bueiro industrial" ou algo assim por enquanto, 
+  // ou definir que não temos sprites específicos e usar placeholders se precisar.
+  // Mas para ficar bonito, vamos reusar o prédio 56 como "Sede da Indústria" e talvez o 44 (muro) como fábrica baixa.
+  // Melhor: Vamos classificar o "Prédio Branco/Azul" (56) como Indústria Limpa/Tecnologia.
+  56: { name: 'Tech Office', cost: 1000, jobs: 50, income: 150, pollution: 2, type: BUILDING_TYPES.INDUSTRIAL },
+
+  // --- SERVIÇOS ---
+  // Vamos usar o prédio vermelho (64) e alto (65) como serviços públicos
+  64: { name: 'Bombeiros', cost: 500, safety: 20, type: BUILDING_TYPES.SERVICE },
+  65: { name: 'Hospital', cost: 1200, health: 30, type: BUILDING_TYPES.SERVICE }
 }
 
 export function getBuilding(index) {
-  return BUILDINGS[index] || BUILDINGS[0]
+  return BUILDINGS[index] || { name: `Item ${index}`, cost: 0, type: 'terrain' }
 }
 
 export function getBuildingByTile(row, col, textureCols = 12) {

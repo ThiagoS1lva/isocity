@@ -18,6 +18,14 @@ export class GameScene extends Phaser.Scene {
     this.currentCategory = BUILDING_TYPES.ROAD
     this.categoryButtons = {}
     this.buildingSprites = []
+    
+    this.cameraZoom = 1
+    this.minZoom = 0.5
+    this.maxZoom = 2
+    this.isDragging = false
+    this.dragStart = { x: 0, y: 0 }
+    this.mapOffset = { x: 0, y: 0 }
+    this.keys = null
   }
   
   create() {
@@ -25,17 +33,36 @@ export class GameScene extends Phaser.Scene {
     this.iconFactory = new IconFactory(this)
     
     this.cameras.main.setBackgroundColor(GAME_CONFIG.COLORS.BACKGROUND)
+    this.input.mouse.disableContextMenu()
+    
+    this.keys = this.input.keyboard.addKeys({
+      up: Phaser.Input.Keyboard.KeyCodes.W,
+      down: Phaser.Input.Keyboard.KeyCodes.S,
+      left: Phaser.Input.Keyboard.KeyCodes.A,
+      right: Phaser.Input.Keyboard.KeyCodes.D,
+      arrowUp: Phaser.Input.Keyboard.KeyCodes.UP,
+      arrowDown: Phaser.Input.Keyboard.KeyCodes.DOWN,
+      arrowLeft: Phaser.Input.Keyboard.KeyCodes.LEFT,
+      arrowRight: Phaser.Input.Keyboard.KeyCodes.RIGHT,
+      reset: Phaser.Input.Keyboard.KeyCodes.R,
+      space: Phaser.Input.Keyboard.KeyCodes.SPACE
+    })
     
     this.createMap()
     this.createHUD()
     this.createBottomToolbar()
     this.setupInput()
+    this.setupCameraControls()
     this.startGameLoop()
     
     this.cityManager.addListener((stats) => this.updateHUD(stats))
     this.updateHUD(this.cityManager.getStats())
     
     this.loadStateFromURL()
+  }
+  
+  update() {
+    this.handleKeyboardCamera()
   }
   
   createMap() {
@@ -57,7 +84,7 @@ export class GameScene extends Phaser.Scene {
       for (let j = 0; j < MAP_SIZE; j++) {
         const { x, y } = this.isoToScreen(i, j)
         
-        const sprite = this.add.sprite(x, y - SPRITE_HEIGHT / 2 + TILE_HEIGHT, 'tiles', 0)
+        const sprite = this.add.sprite(x, y - SPRITE_HEIGHT / 2 + TILE_HEIGHT + 35, 'tiles', 0)
         sprite.setOrigin(0.5, 0.5)
         sprite.setInteractive()
         sprite.setData('gridX', i)
@@ -68,6 +95,9 @@ export class GameScene extends Phaser.Scene {
         
         const indicator = this.add.graphics()
         indicator.setVisible(false)
+        indicator.setData('gridX', i)
+        indicator.setData('gridY', j)
+        indicator.setData('isIndicator', true)
         this.mapContainer.add(indicator)
         this.connectionIndicators[i][j] = indicator
       }
@@ -85,18 +115,23 @@ export class GameScene extends Phaser.Scene {
   }
   
   sortMapSprites() {
-    const children = this.mapContainer.getAll()
-    
-    children.sort((a, b) => {
-      if (a === this.highlightGraphics) return -1
-      if (b === this.highlightGraphics) return 1
+    this.mapContainer.list.sort((a, b) => {
+      if (a === this.highlightGraphics) return 1
+      if (b === this.highlightGraphics) return -1
       
       const aX = a.getData ? (a.getData('gridX') || 0) : 0
       const aY = a.getData ? (a.getData('gridY') || 0) : 0
       const bX = b.getData ? (b.getData('gridX') || 0) : 0
       const bY = b.getData ? (b.getData('gridY') || 0) : 0
       
-      return (aX + aY) - (bX + bY)
+      const diff = (aX + aY) - (bX + bY)
+      if (diff !== 0) return diff
+      
+      // Se estiverem na mesma posição, indicator fica em cima do sprite
+      if (a.getData && a.getData('isIndicator')) return 1
+      if (b.getData && b.getData('isIndicator')) return -1
+      
+      return 0
     })
   }
   
@@ -243,6 +278,9 @@ export class GameScene extends Phaser.Scene {
   }
   
   selectCategory(category) {
+    if (this.currentCategory !== category) {
+      this.buildingScrollX = 0
+    }
     this.currentCategory = category
     
     for (const [cat, data] of Object.entries(this.categoryButtons)) {
@@ -258,8 +296,16 @@ export class GameScene extends Phaser.Scene {
     this.buildingContainer = this.add.container(0, 0)
     this.buildingContainer.setDepth(16)
     
+    // Máscara para o painel de edifícios
+    const maskShape = this.make.graphics()
+    maskShape.fillStyle(0xffffff)
+    maskShape.fillRect(0, panelY, this.scale.width, this.scale.height - panelY)
+    const mask = maskShape.createGeometryMask()
+    this.buildingContainer.setMask(mask)
+    
     this.buildingPanelY = panelY
     this.buildingScrollX = 0
+    this.contentWidth = 0
   }
   
   updateBuildingPanel() {
@@ -271,8 +317,16 @@ export class GameScene extends Phaser.Scene {
     
     const scale = 0.5
     const spacing = SPRITE_WIDTH * scale + 10
-    const startX = 30
+    const startX = 60 // Margem inicial
     const y = this.buildingPanelY + 55
+    
+    // Calcular largura total para limites de scroll
+    this.contentWidth = startX + buildings.length * spacing + 100
+    
+    // Resetar scroll ao mudar de categoria
+    // this.buildingScrollX = 0 // (Opcional, mas bom para UX)
+    // Atualizar posição do container
+    this.buildingContainer.x = this.buildingScrollX
     
     buildings.forEach((building, index) => {
       const x = startX + index * spacing
@@ -378,13 +432,30 @@ export class GameScene extends Phaser.Scene {
     const toolbarY = this.scale.height - 180
     
     this.input.on('pointerdown', (pointer) => {
-      if (pointer.y < toolbarY && pointer.y > 50) {
+      if (pointer.middleButtonDown() || (pointer.leftButtonDown() && this.keys.space.isDown)) {
+        this.isDragging = true
+        this.dragStart.x = pointer.x
+        this.dragStart.y = pointer.y
+        return
+      }
+      
+      if (pointer.y < toolbarY && pointer.y > 50 && !this.isDragging) {
         this.isPlacing = true
         this.handleTileClick(pointer)
       }
     })
     
     this.input.on('pointermove', (pointer) => {
+      if (this.isDragging) {
+        const dx = pointer.x - this.dragStart.x
+        const dy = pointer.y - this.dragStart.y
+        this.mapContainer.x += dx
+        this.mapContainer.y += dy
+        this.dragStart.x = pointer.x
+        this.dragStart.y = pointer.y
+        return
+      }
+      
       if (pointer.y < toolbarY && pointer.y > 50) {
         this.updateHighlight(pointer)
         if (this.isPlacing && pointer.isDown) {
@@ -397,14 +468,80 @@ export class GameScene extends Phaser.Scene {
     
     this.input.on('pointerup', () => {
       this.isPlacing = false
+      this.isDragging = false
     })
+  }
+  
+  setupCameraControls() {
+    const toolbarY = this.scale.height - 180
+    
+    this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY) => {
+      if (pointer.y > toolbarY) {
+        // Scroll da Toolbar
+        const scrollSpeed = 0.5
+        this.buildingScrollX -= deltaY * scrollSpeed
+        
+        // Limitar scroll
+        const minScroll = Math.min(0, this.scale.width - this.contentWidth)
+        this.buildingScrollX = Phaser.Math.Clamp(this.buildingScrollX, minScroll, 0)
+        
+        this.buildingContainer.x = this.buildingScrollX
+      } else if (pointer.y > 50) {
+        // Zoom do Mapa
+        const zoomDelta = deltaY > 0 ? -0.1 : 0.1
+        this.cameraZoom = Phaser.Math.Clamp(this.cameraZoom + zoomDelta, this.minZoom, this.maxZoom)
+        
+        this.mapContainer.setScale(this.cameraZoom)
+      }
+    })
+    
+    this.zoomInfoText = this.add.text(this.scale.width - 80, 60, 'Zoom: 100%', {
+      font: '12px Arial',
+      color: '#9ca3af'
+    }).setDepth(21)
+    
+    this.controlsHint = this.add.text(10, this.scale.height - 195, 'WASD/Setas: Mover | Scroll: Zoom | Arraste Meio: Pan | R: Reset', {
+      font: '11px Arial',
+      color: '#6b7280'
+    }).setDepth(21)
+  }
+  
+  handleKeyboardCamera() {
+    const speed = 8 / this.cameraZoom
+    
+    if (this.keys.up.isDown || this.keys.arrowUp.isDown) {
+      this.mapContainer.y += speed
+    }
+    if (this.keys.down.isDown || this.keys.arrowDown.isDown) {
+      this.mapContainer.y -= speed
+    }
+    if (this.keys.left.isDown || this.keys.arrowLeft.isDown) {
+      this.mapContainer.x += speed
+    }
+    if (this.keys.right.isDown || this.keys.arrowRight.isDown) {
+      this.mapContainer.x -= speed
+    }
+    
+    if (this.keys.reset.isDown) {
+      this.resetCamera()
+    }
+    
+    this.zoomInfoText.setText(`Zoom: ${Math.round(this.cameraZoom * 100)}%`)
+  }
+  
+  resetCamera() {
+    const mapY = (this.scale.height - 200) / 2 + 30
+    this.mapContainer.x = this.scale.width / 2
+    this.mapContainer.y = mapY
+    this.cameraZoom = 1
+    this.mapContainer.setScale(1)
   }
   
   screenToIso(screenX, screenY) {
     const { TILE_WIDTH, TILE_HEIGHT } = GAME_CONFIG
     
-    const localX = screenX - this.mapContainer.x
-    const localY = screenY - this.mapContainer.y
+    const localX = (screenX - this.mapContainer.x) / this.cameraZoom
+    const localY = (screenY - this.mapContainer.y) / this.cameraZoom
     
     const isoX = (localY / TILE_HEIGHT - localX / TILE_WIDTH)
     const isoY = (localY / TILE_HEIGHT + localX / TILE_WIDTH)
