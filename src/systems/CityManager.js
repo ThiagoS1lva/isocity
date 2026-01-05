@@ -17,6 +17,11 @@ export class CityManager {
     this.connectedBuildings = 0
     this.disconnectedBuildings = 0
     
+    // Demanda RCI
+    this.demandResidential = 0
+    this.demandCommercial = 0
+    this.demandIndustrial = 0
+    
     this.gameSpeed = 1
     this.isPaused = false
     this.tickCount = 0
@@ -87,7 +92,10 @@ export class CityManager {
       
       this.money -= newBuilding.cost
       
-      this.map[x][y] = { row: realRow, col: realCol, rotation: rotation }
+      // Prédios começam vazios (0% ocupação), exceto estradas/terreno
+      const initialOccupancy = (newBuilding.type === BUILDING_TYPES.ROAD || newBuilding.type === BUILDING_TYPES.TERRAIN) ? 100 : 0
+      
+      this.map[x][y] = { row: realRow, col: realCol, rotation: rotation, occupancy: initialOccupancy }
       
       this.roadSystem.updateConnections()
       
@@ -160,7 +168,14 @@ export class CityManager {
         if (building.type === BUILDING_TYPES.TERRAIN) continue
         
         const isConnected = this.roadSystem.isConnected(i, j) || building.type === BUILDING_TYPES.ROAD
-        const multiplier = isConnected ? 1 : 0.1
+        const connectionMultiplier = isConnected ? 1 : 0.1
+        
+        // Fator de ocupação (0 a 1)
+        const occupancy = tile.occupancy !== undefined ? tile.occupancy : 100
+        const occupancyFactor = occupancy / 100
+        
+        // Multiplicador final = conexão × ocupação
+        const multiplier = connectionMultiplier * occupancyFactor
         
         if (building.type !== BUILDING_TYPES.ROAD) {
           if (isConnected) connected++
@@ -169,22 +184,22 @@ export class CityManager {
         
         totalPopulation += Math.floor((building.population || 0) * multiplier)
         totalJobs += Math.floor((building.jobs || 0) * multiplier)
-        totalSafety += Math.floor((building.safety || 0) * multiplier)
-        totalHealth += Math.floor((building.health || 0) * multiplier)
-        totalEducation += Math.floor((building.education || 0) * multiplier)
+        totalSafety += Math.floor((building.safety || 0) * connectionMultiplier) // Serviços funcionam mesmo vazios
+        totalHealth += Math.floor((building.health || 0) * connectionMultiplier)
+        totalEducation += Math.floor((building.education || 0) * connectionMultiplier)
         
         if (building.income > 0) {
           totalIncome += Math.floor(building.income * multiplier)
         } else if (building.income < 0) {
-          totalExpenses += Math.abs(building.income)
+          totalExpenses += Math.abs(building.income) // Manutenção é fixa
         }
         
         if (building.happiness) {
-          totalHappiness += Math.floor(building.happiness * multiplier)
+          totalHappiness += Math.floor(building.happiness * connectionMultiplier)
           happinessFactors++
         }
         
-        totalPollution += building.pollution || 0
+        totalPollution += Math.floor((building.pollution || 0) * occupancyFactor)
       }
     }
     
@@ -212,12 +227,61 @@ export class CityManager {
     }
     
     this.happiness = Math.max(0, Math.min(100, baseHappiness))
+    
+    // Calcular Demanda RCI
+    this.calculateDemand()
+  }
+  
+  calculateDemand() {
+    // === DEMANDAS PASSIVAS (Base) ===
+    // Cidade vazia sempre pede crescimento
+    const isEmpty = this.population === 0 && this.jobs === 0
+    
+    if (isEmpty) {
+      this.demandResidential = 40
+      this.demandCommercial = 30
+      this.demandIndustrial = 35
+      return
+    }
+    
+    const jobSurplus = this.jobs - this.population
+    this.demandResidential = Math.round(
+      Math.max(-100, Math.min(100, 20 + jobSurplus * 5))
+    )
+    
+    const commerceNeed = (this.population / 10) + (this.jobs / 15)
+    const commerceHave = this.income / 10
+    const commerceGap = commerceNeed - commerceHave
+    this.demandCommercial = Math.round(
+      Math.max(-100, Math.min(100, 15 + commerceGap * 8))
+    )
+    
+    const unemployed = this.population - this.jobs
+    // Cada pessoa sem emprego = +5 demanda industrial
+    this.demandIndustrial = Math.round(
+      Math.max(-100, Math.min(100, 20 + unemployed * 5))
+    )
+    
+    // === AJUSTES FINAIS ===
+    // Felicidade muito baixa reduz desejo de morar
+    if (this.happiness < 40) {
+      const penalty = (40 - this.happiness) / 40
+      this.demandResidential = Math.round(this.demandResidential * (1 - penalty * 0.7))
+    }
+    
   }
   
   tick() {
     if (this.isPaused) return
     
     this.tickCount++
+    
+    // Crescer/Esvaziar prédios baseado na demanda
+    this.growBuildings()
+    
+    // Recalcular stats após crescimento
+    this.calculateStats()
+    
     const netIncome = this.income - this.expenses
     this.money += netIncome
     
@@ -226,6 +290,56 @@ export class CityManager {
     }
     
     this.notifyListeners()
+  }
+  
+  growBuildings() {
+    const { MAP_SIZE, TEXTURE_COLS } = GAME_CONFIG
+    
+    // Taxa de crescimento base por tick (%)
+    const baseGrowthRate = 2
+    
+    for (let i = 0; i < MAP_SIZE; i++) {
+      for (let j = 0; j < MAP_SIZE; j++) {
+        const tile = this.map[i][j]
+        const index = tile.row * TEXTURE_COLS + tile.col
+        const building = getBuilding(index)
+        
+        // Ignorar terreno e estradas
+        if (building.type === BUILDING_TYPES.TERRAIN || building.type === BUILDING_TYPES.ROAD) continue
+        
+        // Verificar se está conectado
+        const isConnected = this.roadSystem.isConnected(i, j)
+        if (!isConnected) continue // Prédios desconectados não crescem
+        
+        // Determinar a demanda relevante para este tipo de prédio
+        let demand = 0
+        if (building.type === BUILDING_TYPES.RESIDENTIAL) {
+          demand = this.demandResidential
+        } else if (building.type === BUILDING_TYPES.COMMERCIAL) {
+          demand = this.demandCommercial
+        } else if (building.type === BUILDING_TYPES.INDUSTRIAL) {
+          demand = this.demandIndustrial
+        } else {
+          // Serviços e decorações crescem mais rápido (sempre úteis)
+          demand = 50
+        }
+        
+        // Calcular mudança de ocupação
+        const currentOccupancy = tile.occupancy !== undefined ? tile.occupancy : 100
+        let change = 0
+        
+        if (demand > 0 && currentOccupancy < 100) {
+          // Demanda positiva: crescer
+          change = baseGrowthRate * (demand / 100) * 2
+        } else if (demand < 0 && currentOccupancy > 0) {
+          // Demanda negativa: esvaziar (mais lento)
+          change = -baseGrowthRate * (Math.abs(demand) / 100) * 0.5
+        }
+        
+        // Aplicar mudança
+        tile.occupancy = Math.max(0, Math.min(100, currentOccupancy + change))
+      }
+    }
   }
   
   getNetIncome() {
@@ -274,7 +388,10 @@ export class CityManager {
       isPaused: this.isPaused,
       gameSpeed: this.gameSpeed,
       connectedBuildings: this.connectedBuildings,
-      disconnectedBuildings: this.disconnectedBuildings
+      disconnectedBuildings: this.disconnectedBuildings,
+      demandResidential: this.demandResidential,
+      demandCommercial: this.demandCommercial,
+      demandIndustrial: this.demandIndustrial
     }
   }
   

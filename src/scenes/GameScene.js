@@ -28,6 +28,7 @@ export class GameScene extends Phaser.Scene {
     this.mapOffset = { x: 0, y: 0 }
     this.keys = null
     this.currentRotation = 0 // 0: Normal, 1: FlipX
+    this.inspectedTile = null // { x, y } do tile sendo inspecionado
   }
   
   create() {
@@ -60,7 +61,10 @@ export class GameScene extends Phaser.Scene {
     this.setupCameraControls()
     this.startGameLoop()
     
-    this.cityManager.addListener((stats) => this.updateHUD(stats))
+    this.cityManager.addListener((stats) => {
+      this.updateHUD(stats)
+      this.updateInspectorIfOpen()
+    })
     this.updateHUD(this.cityManager.getStats())
     
     this.loadStateFromURL()
@@ -226,6 +230,115 @@ export class GameScene extends Phaser.Scene {
     })
     
     this.createSpeedControls()
+    this.createRCIBars()
+  }
+  
+  createRCIBars() {
+    const barWidth = 24
+    const barHeight = 60
+    const spacing = 8
+    const startX = 700
+    const centerY = 25
+    
+    // Container principal
+    this.rciContainer = this.add.container(startX, centerY - barHeight / 2 - 5)
+    this.rciContainer.setDepth(21)
+    
+    // Painel de fundo
+    const panelWidth = (barWidth + spacing) * 3 + 20
+    const panelHeight = barHeight + 30
+    const bgGraphics = this.add.graphics()
+    bgGraphics.fillStyle(0x1f2937, 0.95)
+    bgGraphics.fillRoundedRect(-10, -10, panelWidth, panelHeight, 8)
+    bgGraphics.lineStyle(1, 0x374151)
+    bgGraphics.strokeRoundedRect(-10, -10, panelWidth, panelHeight, 8)
+    this.rciContainer.add(bgGraphics)
+    
+    // Título
+    const title = this.add.text(panelWidth / 2 - 10, -5, 'DEMANDA', {
+      font: 'bold 8px Arial',
+      color: '#6b7280'
+    }).setOrigin(0.5, 0)
+    this.rciContainer.add(title)
+    
+    // Configuração das barras
+    const labels = ['R', 'C', 'I']
+    const fullLabels = ['Residencial', 'Comercial', 'Industrial']
+    const colors = [0x22c55e, 0x3b82f6, 0xeab308]
+    
+    this.rciBars = []
+    
+    labels.forEach((label, i) => {
+      const x = i * (barWidth + spacing)
+      const barY = 10
+      
+      // Fundo da barra (escuro)
+      const barBg = this.add.graphics()
+      barBg.fillStyle(0x111827)
+      barBg.fillRoundedRect(x, barY, barWidth, barHeight, 4)
+      this.rciContainer.add(barBg)
+      
+      // Linha central (zero)
+      const zeroLine = this.add.graphics()
+      zeroLine.lineStyle(2, 0x4b5563)
+      zeroLine.lineBetween(x + 2, barY + barHeight / 2, x + barWidth - 2, barY + barHeight / 2)
+      this.rciContainer.add(zeroLine)
+      
+      // Barra de preenchimento
+      const demandBar = this.add.graphics()
+      this.rciContainer.add(demandBar)
+      
+      // Borda da barra
+      const barBorder = this.add.graphics()
+      barBorder.lineStyle(1, colors[i], 0.5)
+      barBorder.strokeRoundedRect(x, barY, barWidth, barHeight, 4)
+      this.rciContainer.add(barBorder)
+      
+      // Label da letra
+      const labelText = this.add.text(x + barWidth / 2, barY + barHeight + 8, label, {
+        font: 'bold 12px Arial',
+        color: `#${colors[i].toString(16).padStart(6, '0')}`
+      }).setOrigin(0.5)
+      this.rciContainer.add(labelText)
+      
+      // Valor numérico (será atualizado)
+      const valueText = this.add.text(x + barWidth / 2, barY - 2, '0', {
+        font: 'bold 9px Arial',
+        color: '#9ca3af'
+      }).setOrigin(0.5, 1)
+      this.rciContainer.add(valueText)
+      
+      // Área interativa para tooltip
+      const hitArea = this.add.rectangle(x + barWidth / 2, barY + barHeight / 2, barWidth + 4, barHeight + 20, 0x000000, 0)
+      hitArea.setInteractive({ useHandCursor: true })
+      hitArea.on('pointerover', () => {
+        this.showRCITooltip(fullLabels[i], colors[i], x + barWidth / 2 + startX, centerY + barHeight)
+      })
+      hitArea.on('pointerout', () => this.hideTooltip())
+      this.rciContainer.add(hitArea)
+      
+      this.rciBars.push({ 
+        bar: demandBar, 
+        valueText,
+        color: colors[i], 
+        x, 
+        y: barY,
+        width: barWidth, 
+        height: barHeight 
+      })
+    })
+  }
+  
+  showRCITooltip(label, color, x, y) {
+    if (this.rciTooltip) this.rciTooltip.destroy()
+    
+    const colorHex = `#${color.toString(16).padStart(6, '0')}`
+    this.rciTooltip = this.add.text(x, y + 15, label, {
+      font: 'bold 11px Arial',
+      color: colorHex,
+      backgroundColor: '#1f2937',
+      padding: { x: 8, y: 4 }
+    }).setOrigin(0.5, 0).setDepth(100)
   }
   
   createSpeedControls() {
@@ -498,6 +611,10 @@ export class GameScene extends Phaser.Scene {
       this.tooltip.destroy()
       this.tooltip = null
     }
+    if (this.rciTooltip) {
+      this.rciTooltip.destroy()
+      this.rciTooltip = null
+    }
   }
   
   setupInput() {
@@ -572,7 +689,7 @@ export class GameScene extends Phaser.Scene {
       color: '#9ca3af'
     }).setDepth(21)
     
-    this.controlsHint = this.add.text(10, this.scale.height - 195, 'WASD/Setas: Mover | Scroll: Zoom | Arraste Meio: Pan | R: Reset', {
+    this.controlsHint = this.add.text(10, this.scale.height - 195, 'WASD: Mover | Scroll: Zoom | R: Rotacionar | SHIFT+Clique: Inspecionar', {
       font: '11px Arial',
       color: '#6b7280'
     }).setDepth(21)
@@ -649,24 +766,298 @@ export class GameScene extends Phaser.Scene {
   }
   
   handleTileClick(pointer) {
-    const { MAP_SIZE } = GAME_CONFIG
+    const { MAP_SIZE, TEXTURE_COLS } = GAME_CONFIG
     const pos = this.screenToIso(pointer.x, pointer.y)
     
     if (pos.x >= 0 && pos.x < MAP_SIZE && pos.y >= 0 && pos.y < MAP_SIZE) {
       const isRightClick = pointer.rightButtonDown()
+      const isInspect = this.keys.space.isDown || this.input.keyboard.addKey('SHIFT').isDown
       
-      if (isRightClick) {
-        this.cityManager.clearTile(pos.x, pos.y)
-      } else {
-        const result = this.cityManager.setTile(pos.x, pos.y, this.selectedTile.row, this.selectedTile.col, this.currentRotation)
-        if (!result.success && result.reason === 'no_money') {
-          this.showNotification('Dinheiro insuficiente!', 'error')
-        }
+      if (isInspect && !isRightClick) {
+        this.showInspector(pos.x, pos.y)
+        return
       }
       
-      this.updateMapDisplay()
-      this.updateConnectionIndicators()
-      this.saveStateToURL()
+      // Verificar o que já existe no tile
+      const existingTile = this.cityManager.getTile(pos.x, pos.y)
+      const existingIndex = existingTile.row * TEXTURE_COLS + existingTile.col
+      const existingBuilding = getBuilding(existingIndex)
+      const isExistingBuilding = existingBuilding.type !== BUILDING_TYPES.TERRAIN
+      
+      if (isRightClick) {
+        // DEMOLIR
+        if (isExistingBuilding) {
+          this.showConfirmModal(
+            `Demolir ${existingBuilding.name}?`,
+            `Você receberá $${Math.floor(existingBuilding.cost * 0.5)} de volta.`,
+            () => {
+              this.cityManager.clearTile(pos.x, pos.y)
+              this.hideInspector()
+              this.updateMapDisplay()
+              this.updateConnectionIndicators()
+              this.saveStateToURL()
+            }
+          )
+        }
+      } else {
+        // CONSTRUIR
+        const newIndex = this.selectedTile.row * TEXTURE_COLS + this.selectedTile.col
+        const newBuilding = getBuilding(newIndex)
+        
+        if (isExistingBuilding && existingIndex !== newIndex) {
+          // SUBSTITUIR - Pedir confirmação
+          this.showConfirmModal(
+            `Substituir ${existingBuilding.name}?`,
+            `Será substituído por ${newBuilding.name} (-$${newBuilding.cost})`,
+            () => {
+              const result = this.cityManager.setTile(pos.x, pos.y, this.selectedTile.row, this.selectedTile.col, this.currentRotation)
+              if (!result.success && result.reason === 'no_money') {
+                this.showNotification('Dinheiro insuficiente!', 'error')
+              }
+              this.updateMapDisplay()
+              this.updateConnectionIndicators()
+              this.saveStateToURL()
+            }
+          )
+        } else {
+          // CONSTRUIR EM TERRENO VAZIO - Sem confirmação
+          const result = this.cityManager.setTile(pos.x, pos.y, this.selectedTile.row, this.selectedTile.col, this.currentRotation)
+          if (!result.success && result.reason === 'no_money') {
+            this.showNotification('Dinheiro insuficiente!', 'error')
+          }
+          this.updateMapDisplay()
+          this.updateConnectionIndicators()
+          this.saveStateToURL()
+        }
+      }
+    }
+  }
+  
+  showConfirmModal(title, description, onConfirm) {
+    // Destruir modal anterior se existir
+    if (this.confirmModal) {
+      this.confirmModal.destroy()
+    }
+    
+    const width = this.scale.width
+    const height = this.scale.height
+    const modalWidth = 320
+    const modalHeight = 150
+    
+    this.confirmModal = this.add.container(width / 2, height / 2)
+    this.confirmModal.setDepth(100)
+    
+    // Fundo escurecido
+    const overlay = this.add.rectangle(0, 0, width, height, 0x000000, 0.6)
+    overlay.setInteractive() // Bloqueia cliques fora do modal
+    this.confirmModal.add(overlay)
+    
+    // Painel do modal
+    const panel = this.add.graphics()
+    panel.fillStyle(0x1f2937, 1)
+    panel.fillRoundedRect(-modalWidth / 2, -modalHeight / 2, modalWidth, modalHeight, 12)
+    panel.lineStyle(2, 0x374151)
+    panel.strokeRoundedRect(-modalWidth / 2, -modalHeight / 2, modalWidth, modalHeight, 12)
+    this.confirmModal.add(panel)
+    
+    // Título
+    const titleText = this.add.text(0, -modalHeight / 2 + 25, title, {
+      font: 'bold 16px Arial',
+      color: '#ffffff'
+    }).setOrigin(0.5)
+    this.confirmModal.add(titleText)
+    
+    // Descrição
+    const descText = this.add.text(0, -10, description, {
+      font: '13px Arial',
+      color: '#9ca3af',
+      align: 'center',
+      wordWrap: { width: modalWidth - 40 }
+    }).setOrigin(0.5)
+    this.confirmModal.add(descText)
+    
+    // Botão Cancelar
+    const cancelBtn = this.add.text(-60, modalHeight / 2 - 35, 'Cancelar', {
+      font: 'bold 14px Arial',
+      color: '#ffffff',
+      backgroundColor: '#374151',
+      padding: { x: 16, y: 8 }
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+    cancelBtn.on('pointerover', () => cancelBtn.setStyle({ backgroundColor: '#4b5563' }))
+    cancelBtn.on('pointerout', () => cancelBtn.setStyle({ backgroundColor: '#374151' }))
+    cancelBtn.on('pointerdown', () => this.hideConfirmModal())
+    this.confirmModal.add(cancelBtn)
+    
+    // Botão Confirmar
+    const confirmBtn = this.add.text(60, modalHeight / 2 - 35, 'Confirmar', {
+      font: 'bold 14px Arial',
+      color: '#ffffff',
+      backgroundColor: '#dc2626',
+      padding: { x: 16, y: 8 }
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+    confirmBtn.on('pointerover', () => confirmBtn.setStyle({ backgroundColor: '#ef4444' }))
+    confirmBtn.on('pointerout', () => confirmBtn.setStyle({ backgroundColor: '#dc2626' }))
+    confirmBtn.on('pointerdown', () => {
+      this.hideConfirmModal()
+      onConfirm()
+    })
+    this.confirmModal.add(confirmBtn)
+  }
+  
+  hideConfirmModal() {
+    if (this.confirmModal) {
+      this.confirmModal.destroy()
+      this.confirmModal = null
+    }
+  }
+  
+  showInspector(x, y) {
+    // Salvar coordenadas para atualização reativa
+    this.inspectedTile = { x, y }
+    
+    const tile = this.cityManager.getTile(x, y)
+    const frameIndex = tile.row * GAME_CONFIG.TEXTURE_COLS + tile.col
+    const building = getBuilding(frameIndex)
+    
+    // Se for terreno vazio, não mostrar
+    if (building.type === BUILDING_TYPES.TERRAIN) {
+      this.hideInspector()
+      return
+    }
+    
+    const isConnected = this.cityManager.isTileConnected(x, y) || building.type === BUILDING_TYPES.ROAD
+    const occupancy = tile.occupancy !== undefined ? tile.occupancy : 100
+    
+    // Destruir painel anterior
+    if (this.inspectorPanel) {
+      this.inspectorPanel.destroy()
+    }
+    
+    // Criar painel
+    const panelWidth = 220
+    const panelHeight = 200
+    const panelX = this.scale.width - panelWidth - 20
+    const panelY = 70
+    
+    this.inspectorPanel = this.add.container(panelX, panelY)
+    this.inspectorPanel.setDepth(50)
+    
+    // Fundo
+    const bg = this.add.graphics()
+    bg.fillStyle(0x1f2937, 0.95)
+    bg.fillRoundedRect(0, 0, panelWidth, panelHeight, 10)
+    bg.lineStyle(2, CATEGORY_INFO[building.type]?.color || 0x6b7280)
+    bg.strokeRoundedRect(0, 0, panelWidth, panelHeight, 10)
+    this.inspectorPanel.add(bg)
+    
+    // Título
+    const title = this.add.text(panelWidth / 2, 15, building.name, {
+      font: 'bold 14px Arial',
+      color: '#ffffff'
+    }).setOrigin(0.5, 0)
+    this.inspectorPanel.add(title)
+    
+    // Tipo
+    const typeColor = CATEGORY_INFO[building.type]?.color || 0x6b7280
+    const typeText = this.add.text(panelWidth / 2, 35, building.type.toUpperCase(), {
+      font: 'bold 10px Arial',
+      color: `#${typeColor.toString(16).padStart(6, '0')}`
+    }).setOrigin(0.5, 0)
+    this.inspectorPanel.add(typeText)
+    
+    // Linha separadora
+    const separator = this.add.graphics()
+    separator.lineStyle(1, 0x374151)
+    separator.lineBetween(15, 55, panelWidth - 15, 55)
+    this.inspectorPanel.add(separator)
+    
+    // Detalhes
+    const details = []
+    
+    // Status de conexão
+    const connStatus = isConnected ? '✅ Conectado' : '❌ Desconectado'
+    const connColor = isConnected ? '#4ade80' : '#f87171'
+    details.push({ label: 'Status', value: connStatus, color: connColor })
+    
+    // Ocupação (se aplicável)
+    if (building.type !== BUILDING_TYPES.ROAD) {
+      const occBar = `${'█'.repeat(Math.floor(occupancy / 10))}${'░'.repeat(10 - Math.floor(occupancy / 10))}`
+      details.push({ label: 'Ocupação', value: `${Math.round(occupancy)}% ${occBar}`, color: '#60a5fa' })
+    }
+    
+    // População
+    if (building.population) {
+      const actualPop = Math.floor(building.population * (occupancy / 100) * (isConnected ? 1 : 0.1))
+      details.push({ label: 'População', value: `${actualPop}/${building.population}`, color: '#f472b6' })
+    }
+    
+    // Empregos
+    if (building.jobs) {
+      const actualJobs = Math.floor(building.jobs * (occupancy / 100) * (isConnected ? 1 : 0.1))
+      details.push({ label: 'Empregos', value: `${actualJobs}/${building.jobs}`, color: '#fbbf24' })
+    }
+    
+    // Renda
+    if (building.income > 0) {
+      const actualIncome = Math.floor(building.income * (occupancy / 100) * (isConnected ? 1 : 0.1))
+      details.push({ label: 'Renda', value: `+$${actualIncome}/s`, color: '#4ade80' })
+    } else if (building.income < 0) {
+      details.push({ label: 'Manutenção', value: `-$${Math.abs(building.income)}/s`, color: '#f87171' })
+    }
+    
+    // Serviços
+    if (building.safety) details.push({ label: 'Segurança', value: `+${building.safety}`, color: '#ef4444' })
+    if (building.health) details.push({ label: 'Saúde', value: `+${building.health}`, color: '#22c55e' })
+    if (building.happiness) details.push({ label: 'Felicidade', value: `+${building.happiness}`, color: '#f472b6' })
+    if (building.pollution) details.push({ label: 'Poluição', value: `+${building.pollution}`, color: '#9ca3af' })
+    
+    // Renderizar detalhes
+    let yOffset = 65
+    details.forEach(detail => {
+      const labelText = this.add.text(15, yOffset, detail.label + ':', {
+        font: '11px Arial',
+        color: '#9ca3af'
+      })
+      this.inspectorPanel.add(labelText)
+      
+      const valueText = this.add.text(panelWidth - 15, yOffset, detail.value, {
+        font: 'bold 11px Arial',
+        color: detail.color
+      }).setOrigin(1, 0)
+      this.inspectorPanel.add(valueText)
+      
+      yOffset += 18
+    })
+    
+    // Botão Fechar
+    const closeBtn = this.add.text(panelWidth - 10, 5, '✕', {
+      font: 'bold 14px Arial',
+      color: '#9ca3af'
+    }).setOrigin(1, 0).setInteractive({ useHandCursor: true })
+    closeBtn.on('pointerover', () => closeBtn.setColor('#ffffff'))
+    closeBtn.on('pointerout', () => closeBtn.setColor('#9ca3af'))
+    closeBtn.on('pointerdown', () => this.hideInspector())
+    this.inspectorPanel.add(closeBtn)
+    
+    // Ajustar altura do painel baseado no conteúdo
+    bg.clear()
+    bg.fillStyle(0x1f2937, 0.95)
+    bg.fillRoundedRect(0, 0, panelWidth, yOffset + 15, 10)
+    bg.lineStyle(2, CATEGORY_INFO[building.type]?.color || 0x6b7280)
+    bg.strokeRoundedRect(0, 0, panelWidth, yOffset + 15, 10)
+  }
+  
+  hideInspector() {
+    if (this.inspectorPanel) {
+      this.inspectorPanel.destroy()
+      this.inspectorPanel = null
+    }
+    this.inspectedTile = null
+  }
+  
+  updateInspectorIfOpen() {
+    if (this.inspectedTile && this.inspectorPanel) {
+      this.showInspector(this.inspectedTile.x, this.inspectedTile.y)
     }
   }
   
@@ -683,9 +1074,8 @@ export class GameScene extends Phaser.Scene {
         const ground = this.groundSprites[i][j]
         const { x, y } = this.isoToScreen(i, j)
         
-        // Aplicar rotação
+        // Guardar rotação para aplicar depois
         const rotation = tile.rotation || 0
-        sprite.setFlipX(rotation === 1)
         
         if (building.texture) {
           // --- MODO CUSTOM TEXTURE (ex: Bombeiro) ---
@@ -729,8 +1119,14 @@ export class GameScene extends Phaser.Scene {
           // Restaurar posição padrão do spritesheet (calculada para frames de 230px de altura)
           sprite.y = y - SPRITE_HEIGHT / 2 + TILE_HEIGHT + 35
           sprite.x = x
-          
-          sprite.setFlipX(false) // Tiles padrão geralmente não giram dessa forma
+        }
+        
+        // Aplicar rotação para TODOS os tipos de construção
+        // Exceto terreno (grama) e estradas (que usam auto-tile)
+        if (building.type !== BUILDING_TYPES.TERRAIN && building.type !== BUILDING_TYPES.ROAD) {
+          sprite.setFlipX(rotation === 1)
+        } else {
+          sprite.setFlipX(false)
         }
       }
     }
@@ -787,6 +1183,45 @@ export class GameScene extends Phaser.Scene {
     const total = connected + (stats.disconnectedBuildings || 0)
     this.hudElements.roads.setText(`${connected}/${total}`)
     this.hudElements.roads.setColor(stats.disconnectedBuildings > 0 ? '#f87171' : '#4ade80')
+    
+    // Atualizar Barras RCI
+    this.updateRCIBars(stats)
+  }
+  
+  updateRCIBars(stats) {
+    if (!this.rciBars) return
+    
+    const demands = [
+      stats.demandResidential || 0,
+      stats.demandCommercial || 0,
+      stats.demandIndustrial || 0
+    ]
+    
+    this.rciBars.forEach((barData, i) => {
+      const demand = demands[i]
+      const { bar, valueText, color, x, y, width, height } = barData
+      
+      bar.clear()
+      
+      // Atualizar texto do valor
+      const sign = demand > 0 ? '+' : ''
+      valueText.setText(`${sign}${demand}`)
+      valueText.setColor(demand > 0 ? '#4ade80' : demand < 0 ? '#f87171' : '#9ca3af')
+      
+      // Calcular altura da barra
+      const maxHeight = height / 2 - 4
+      const barFillHeight = Math.abs(demand) / 100 * maxHeight
+      
+      if (demand > 0) {
+        // Demanda positiva: barra sobe do centro
+        bar.fillStyle(color, 0.9)
+        bar.fillRoundedRect(x + 2, y + height / 2 - barFillHeight, width - 4, barFillHeight, 2)
+      } else if (demand < 0) {
+        // Excesso: barra desce do centro (mais transparente)
+        bar.fillStyle(color, 0.4)
+        bar.fillRoundedRect(x + 2, y + height / 2, width - 4, barFillHeight, 2)
+      }
+    })
   }
   
   showNotification(message, type = 'info') {
