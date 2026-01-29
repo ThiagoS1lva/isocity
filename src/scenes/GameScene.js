@@ -29,6 +29,7 @@ export class GameScene extends Phaser.Scene {
     this.keys = null
     this.currentRotation = 0 // 0: Normal, 1: FlipX
     this.inspectedTile = null // { x, y } do tile sendo inspecionado
+    this.isDemolishMode = false // Modo demolição ativo
   }
   
   create() {
@@ -56,6 +57,7 @@ export class GameScene extends Phaser.Scene {
     
     this.createMap()
     this.createHUD()
+    this.createDemolishButton()
     this.createBottomToolbar()
     this.setupInput()
     this.setupCameraControls()
@@ -391,6 +393,41 @@ export class GameScene extends Phaser.Scene {
     this.speed1Btn.setStyle({ backgroundColor: gameSpeed === 1 && !isPaused ? '#8b5cf6' : '#374151' })
     this.speed2Btn.setStyle({ backgroundColor: gameSpeed === 2 && !isPaused ? '#8b5cf6' : '#374151' })
     this.speed3Btn.setStyle({ backgroundColor: gameSpeed === 3 && !isPaused ? '#8b5cf6' : '#374151' })
+  }
+  
+  createDemolishButton() {
+    const x = this.scale.width - 200
+    const y = 25
+    
+    this.demolishBtn = this.add.text(x, y, '🚧 Demolir', {
+      font: 'bold 13px Arial',
+      color: '#ffffff',
+      backgroundColor: '#374151',
+      padding: { x: 12, y: 6 }
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true }).setDepth(21)
+    
+    this.demolishBtn.on('pointerdown', () => this.toggleDemolishMode())
+  }
+  
+  toggleDemolishMode() {
+    this.isDemolishMode = !this.isDemolishMode
+    this.updateDemolishButton()
+    
+    if (this.isDemolishMode) {
+      this.showNotification('Modo Demolição ATIVO - Clique para demolir', 'error')
+    } else {
+      this.showNotification('Modo Demolição desativado', 'info')
+    }
+  }
+  
+  updateDemolishButton() {
+    if (this.isDemolishMode) {
+      this.demolishBtn.setStyle({ backgroundColor: '#dc2626', color: '#ffffff' })
+      this.demolishBtn.setText('🚧 DEMOLINDO')
+    } else {
+      this.demolishBtn.setStyle({ backgroundColor: '#374151', color: '#ffffff' })
+      this.demolishBtn.setText('🚧 Demolir')
+    }
   }
   
   createBottomToolbar() {
@@ -770,10 +807,9 @@ export class GameScene extends Phaser.Scene {
     const pos = this.screenToIso(pointer.x, pointer.y)
     
     if (pos.x >= 0 && pos.x < MAP_SIZE && pos.y >= 0 && pos.y < MAP_SIZE) {
-      const isRightClick = pointer.rightButtonDown()
       const isInspect = this.keys.space.isDown || this.input.keyboard.addKey('SHIFT').isDown
       
-      if (isInspect && !isRightClick) {
+      if (isInspect) {
         this.showInspector(pos.x, pos.y)
         return
       }
@@ -784,8 +820,8 @@ export class GameScene extends Phaser.Scene {
       const existingBuilding = getBuilding(existingIndex)
       const isExistingBuilding = existingBuilding.type !== BUILDING_TYPES.TERRAIN
       
-      if (isRightClick) {
-        // DEMOLIR
+      if (this.isDemolishMode) {
+        // MODO DEMOLIÇÃO ATIVO
         if (isExistingBuilding) {
           this.showConfirmModal(
             `Demolir ${existingBuilding.name}?`,
@@ -800,7 +836,7 @@ export class GameScene extends Phaser.Scene {
           )
         }
       } else {
-        // CONSTRUIR
+        // MODO CONSTRUÇÃO
         const newIndex = this.selectedTile.row * TEXTURE_COLS + this.selectedTile.col
         const newBuilding = getBuilding(newIndex)
         
